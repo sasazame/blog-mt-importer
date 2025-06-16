@@ -99,3 +99,22 @@ npm run test
 npm run test:watch
 npm run test:cov
 ```
+
+## Documentation
+
+- [API Documentation](./docs/API.md) - REST API endpoints and usage
+- [Architecture](./docs/ARCHITECTURE.md) - System design and structure
+- [Roadmap](./ROADMAP.md) - Future features and implementation plans
+- [Contributing](./docs/CONTRIBUTING.md) - Development guidelines and setup
+
+## Next Features (Planned)
+
+### 1. Markdown Export
+Export blog posts from database to Markdown format with YAML front matter.
+
+### 2. Article Recommendations
+- Random article picker
+- Related article suggestions
+- Embeddable article cards with iframe support
+
+See [ROADMAP.md](./ROADMAP.md) for detailed implementation plans.
