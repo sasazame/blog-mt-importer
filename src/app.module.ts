@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BlogModule } from './modules/blog/blog.module';
 import { MTImportModule } from './modules/mt-import/mt-import.module';
+import { ExportModule } from './modules/export/export.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { MTImportModule } from './modules/mt-import/mt-import.module';
     }),
     BlogModule,
     MTImportModule,
+    ExportModule,
   ],
 })
 export class AppModule {}

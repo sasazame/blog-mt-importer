@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { MTImportService } from './modules/mt-import/services/mt-import.service';
+import { MarkdownExportService } from './modules/export/services/markdown-export.service';
 import { Command } from 'commander';
 import * as path from 'path';
 
@@ -41,6 +42,68 @@ async function bootstrap() {
         process.exit(0);
       } catch (error) {
         console.error('Error during import:', error);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('export')
+    .description('Export blog posts to Markdown format')
+    .option('--post-id <id>', 'Export specific post by ID')
+    .option('--all', 'Export all posts')
+    .option('--category <category>', 'Export posts by category')
+    .option('--start-date <date>', 'Filter by start date (YYYY-MM-DD)')
+    .option('--end-date <date>', 'Filter by end date (YYYY-MM-DD)')
+    .option('--format <format>', 'Export format: individual or batch', 'individual')
+    .option('--output <path>', 'Output directory path', './exports')
+    .option('--no-front-matter', 'Exclude YAML front matter')
+    .option('--no-extended-body', 'Exclude extended body content')
+    .action(async (options) => {
+      try {
+        // Create NestJS application context
+        const app = await NestFactory.createApplicationContext(AppModule, {
+          logger: ['log', 'error', 'warn'],
+        });
+
+        await app.init();
+        const exportService = app.get(MarkdownExportService);
+
+        const exportOptions = {
+          format: options.format as 'individual' | 'batch',
+          includeFrontMatter: options.frontMatter !== false,
+          includeExtendedBody: options.extendedBody !== false,
+          outputPath: path.resolve(options.output),
+        };
+
+        if (options.postId) {
+          console.log(`Exporting post ID: ${options.postId}`);
+          const markdown = await exportService.exportSinglePost(parseInt(options.postId), exportOptions);
+          const filename = `post-${options.postId}.md`;
+          const fs = await import('fs/promises');
+          await fs.mkdir(exportOptions.outputPath, { recursive: true });
+          await fs.writeFile(path.join(exportOptions.outputPath, filename), markdown);
+          console.log(`Post exported to: ${path.join(exportOptions.outputPath, filename)}`);
+        } else if (options.all) {
+          console.log('Exporting all posts...');
+          await exportService.exportAllPosts(exportOptions);
+        } else if (options.category) {
+          console.log(`Exporting posts in category: ${options.category}`);
+          await exportService.exportByCategory(options.category, exportOptions);
+        } else if (options.startDate && options.endDate) {
+          console.log(`Exporting posts from ${options.startDate} to ${options.endDate}`);
+          const startDate = new Date(options.startDate);
+          const endDate = new Date(options.endDate);
+          await exportService.exportByDateRange(startDate, endDate, exportOptions);
+        } else {
+          console.error('Please specify export criteria: --post-id, --all, --category, or --start-date with --end-date');
+          process.exit(1);
+        }
+
+        await app.close();
+        console.log('Export completed successfully!');
+        process.exit(0);
+      } catch (error) {
+        console.error('Error during export:', error);
         process.exit(1);
       }
     });

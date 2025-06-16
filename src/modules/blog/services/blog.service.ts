@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Between } from 'typeorm';
 import { BlogPost } from '../entities/blog-post.entity';
 
 @Injectable()
@@ -43,5 +43,47 @@ export class BlogService {
 
   async remove(id: number): Promise<void> {
     await this.blogPostRepository.delete(id);
+  }
+
+  async findByCategory(category: string): Promise<BlogPost[]> {
+    return this.blogPostRepository.find({
+      where: { category },
+      order: { publishedAt: 'DESC' },
+    });
+  }
+
+  async findByDateRange(startDate: Date, endDate: Date): Promise<BlogPost[]> {
+    return this.blogPostRepository.find({
+      where: {
+        publishedAt: Between(startDate, endDate),
+      },
+      order: { publishedAt: 'DESC' },
+    });
+  }
+
+  async findWithFilter(filter: {
+    category?: string;
+    startDate?: Date;
+    endDate?: Date;
+    status?: 'Publish' | 'Draft';
+  }): Promise<BlogPost[]> {
+    const where: any = {};
+
+    if (filter.category) {
+      where.category = filter.category;
+    }
+
+    if (filter.status) {
+      where.status = filter.status;
+    }
+
+    if (filter.startDate && filter.endDate) {
+      where.publishedAt = Between(filter.startDate, filter.endDate);
+    }
+
+    return this.blogPostRepository.find({
+      where,
+      order: { publishedAt: 'DESC' },
+    });
   }
 }
