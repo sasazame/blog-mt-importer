@@ -8,6 +8,7 @@ A Node.js/NestJS application for importing MovableType format blog backups into 
 - Store blog posts in PostgreSQL
 - RESTful API for blog management
 - Built with NestJS and TypeScript
+- CLI tool for easy import
 
 ## Prerequisites
 
@@ -29,25 +30,72 @@ Copy `.env.example` to `.env` and update the database connection settings:
 cp .env.example .env
 ```
 
-## Running the application
+## Usage
+
+### Importing MT Format Files
+
+#### Using the import script (recommended):
 
 ```bash
-# development
-npm run start:dev
+# Linux/Mac
+./import-mt.sh /path/to/your/mt-file.txt
 
-# production mode
-npm run start:prod
+# Windows
+import-mt.bat C:\path\to\your\mt-file.txt
 ```
 
-## Test
+#### Using npm commands directly:
 
 ```bash
-# unit tests
+# Import MT file
+npm run cli:dev import /path/to/your/mt-file.txt
+```
+
+### Starting the API Server
+
+```bash
+# Using the start script
+./start-server.sh
+
+# Or using npm commands
+npm run start:dev
+```
+
+The API will be available at `http://localhost:3000/api`
+
+### API Endpoints
+
+- `GET /api/blog-posts` - Get all blog posts
+- `GET /api/blog-posts/:id` - Get a specific blog post
+- `POST /api/blog-posts` - Create a new blog post
+- `PUT /api/blog-posts/:id` - Update a blog post
+- `DELETE /api/blog-posts/:id` - Delete a blog post
+
+## Testing
+
+A sample MT format file is provided in `sample-data/sample-mt.txt` for testing:
+
+```bash
+./import-mt.sh sample-data/sample-mt.txt
+```
+
+## Development
+
+```bash
+# Watch mode
+npm run start:dev
+
+# Build
+npm run build
+
+# Format code
+npm run format
+
+# Lint
+npm run lint
+
+# Tests
 npm run test
-
-# e2e tests
-npm run test:e2e
-
-# test coverage
+npm run test:watch
 npm run test:cov
 ```
