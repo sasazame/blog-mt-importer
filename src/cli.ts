@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { MTImportService } from './modules/mt-import/services/mt-import.service';
@@ -25,9 +26,12 @@ async function bootstrap() {
           logger: ['log', 'error', 'warn'],
         });
 
-        // Get MTImportService
-        const mtImportService = app.get(MTImportService);
+        // Initialize the application
+        await app.init();
 
+        // Get service
+        const mtImportService = app.get(MTImportService);
+        
         // Import file
         await mtImportService.importFromFile(filePath);
 

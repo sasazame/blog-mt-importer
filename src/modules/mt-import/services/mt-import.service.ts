@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { BlogService } from '../../blog/services/blog.service';
 import { MTParser } from '../parsers/mt-parser';
 import { BlogPost } from '../../blog/entities/blog-post.entity';
@@ -8,7 +8,10 @@ import * as fs from 'fs/promises';
 export class MTImportService {
   private readonly logger = new Logger(MTImportService.name);
 
-  constructor(private readonly blogService: BlogService) {}
+  constructor(
+    @Inject(forwardRef(() => BlogService))
+    private readonly blogService: BlogService,
+  ) {}
 
   async importFromFile(filePath: string): Promise<void> {
     try {
@@ -33,9 +36,14 @@ export class MTImportService {
         extendedBody: mtPost.extendedBody,
       }));
 
-      this.logger.log('Saving posts to database...');
+      if (blogPosts.length === 0) {
+        this.logger.warn('No valid posts found to import');
+        return;
+      }
+
+      this.logger.log(`Saving ${blogPosts.length} posts to database...`);
       await this.blogService.createMany(blogPosts);
-      this.logger.log('Import completed successfully');
+      this.logger.log(`Successfully imported ${blogPosts.length} posts`);
     } catch (error) {
       this.logger.error('Import failed', error);
       throw error;

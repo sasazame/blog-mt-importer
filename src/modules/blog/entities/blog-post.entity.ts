@@ -11,13 +11,13 @@ export class BlogPost {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @Column('varchar')
   author: string;
 
-  @Column()
+  @Column('varchar')
   title: string;
 
-  @Column()
+  @Column('varchar')
   basename: string;
 
   @Column({
@@ -27,19 +27,19 @@ export class BlogPost {
   })
   status: 'Publish' | 'Draft';
 
-  @Column({ default: true })
+  @Column('boolean', { default: true })
   allowComments: boolean;
 
-  @Column({ default: false })
+  @Column('boolean', { default: false })
   convertBreaks: boolean;
 
   @Column({ type: 'timestamp' })
   publishedAt: Date;
 
-  @Column({ nullable: true })
+  @Column('varchar', { nullable: true })
   category: string;
 
-  @Column({ nullable: true })
+  @Column('varchar', { nullable: true })
   imageUrl: string;
 
   @Column({ type: 'text', nullable: true })
