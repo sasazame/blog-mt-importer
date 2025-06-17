@@ -5,11 +5,14 @@ import { RssFeed } from '../entities/rss-feed.entity';
 export interface ParsedRssItem {
   title: string;
   body: string;
+  extendedBody?: string;
   date: Date;
   author?: string;
   link?: string;
   guid?: string;
   tags?: string[];
+  category?: string;
+  basename?: string;
 }
 
 @Injectable()
@@ -89,6 +92,12 @@ export class RssParserService {
       // Extract tags/categories
       const tags = this.extractTags(item, mapping.tags);
 
+      // Extract category (primary category)
+      const category = this.extractPrimaryCategory(item);
+
+      // Extract basename from link
+      const basename = this.extractBasename(link);
+
       return {
         title,
         body,
@@ -97,6 +106,8 @@ export class RssParserService {
         link,
         guid,
         tags,
+        category,
+        basename,
       };
     } catch (error) {
       this.logger.error('Failed to map RSS item:', error);
@@ -147,6 +158,46 @@ export class RssParserService {
 
     // Clean and deduplicate tags
     return [...new Set(tags.map(tag => tag.trim()).filter(tag => tag.length > 0))];
+  }
+
+  private extractPrimaryCategory(item: any): string | undefined {
+    // Extract the first/primary category from RSS item
+    if (item.categories && Array.isArray(item.categories) && item.categories.length > 0) {
+      return item.categories[0];
+    }
+    if (item.category) {
+      if (Array.isArray(item.category) && item.category.length > 0) {
+        return item.category[0];
+      } else if (typeof item.category === 'string') {
+        return item.category;
+      }
+    }
+    return undefined;
+  }
+
+  private extractBasename(link?: string): string | undefined {
+    if (!link) return undefined;
+    
+    try {
+      const url = new URL(link);
+      
+      // For hatena blog URLs like: https://sasazame.hateblo.jp/entry/2025/06/17/120000
+      const pathMatch = url.pathname.match(/\/entry\/(.+)$/);
+      if (pathMatch) {
+        return pathMatch[1]; // Returns "2025/06/17/120000"
+      }
+      
+      // Fallback: extract everything after /entry/
+      const entryIndex = url.pathname.indexOf('/entry/');
+      if (entryIndex !== -1) {
+        return url.pathname.substring(entryIndex + 7); // 7 = length of '/entry/'
+      }
+      
+      return undefined;
+    } catch (error) {
+      this.logger.warn(`Failed to extract basename from URL: ${link}`, error);
+      return undefined;
+    }
   }
 
   private generateGuid(title: string, date: Date): string {

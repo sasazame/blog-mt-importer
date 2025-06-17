@@ -4,6 +4,7 @@ import { RssFeed } from './entities/rss-feed.entity';
 import { RssImportLog } from './entities/rss-import-log.entity';
 import { RssImportService } from './services/rss-import.service';
 import { RssParserService } from './services/rss-parser.service';
+import { ContentFetcherService } from './services/content-fetcher.service';
 import { BlogModule } from '../blog/blog.module';
 
 @Module({
@@ -11,7 +12,7 @@ import { BlogModule } from '../blog/blog.module';
     TypeOrmModule.forFeature([RssFeed, RssImportLog]),
     BlogModule,
   ],
-  providers: [RssImportService, RssParserService],
+  providers: [RssImportService, RssParserService, ContentFetcherService],
   exports: [RssImportService],
 })
 export class RssImportModule {}

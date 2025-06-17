@@ -7,7 +7,9 @@ import { RecommendationService } from './modules/recommendation/services/recomme
 import { CardGeneratorService } from './modules/recommendation/services/card-generator.service';
 import { SummaryService } from './modules/llm/services/summary.service';
 import { RssImportService } from './modules/rss-import/services/rss-import.service';
+import { BlogService } from './modules/blog/services/blog.service';
 import { Command } from 'commander';
+import { DataSource } from 'typeorm';
 import * as path from 'path';
 
 async function bootstrap() {
@@ -652,6 +654,277 @@ async function bootstrap() {
         process.exit(0);
       } catch (error) {
         console.error('Error during RSS import:', error);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('rss:clear-logs')
+    .description('Clear RSS import logs (allows re-importing existing posts)')
+    .option('--feed-id <id>', 'Clear logs for specific feed only')
+    .action(async (options) => {
+      try {
+        const app = await NestFactory.createApplicationContext(AppModule, {
+          logger: ['log', 'error', 'warn'],
+        });
+
+        await app.init();
+        const dataSource = app.get(DataSource);
+
+        let deletedCount = 0;
+        if (options.feedId) {
+          const result = await dataSource
+            .createQueryBuilder()
+            .delete()
+            .from('rss_import_logs')
+            .where('feedId = :feedId', { feedId: parseInt(options.feedId, 10) })
+            .execute();
+          deletedCount = result.affected || 0;
+          console.log(`✅ Cleared ${deletedCount} import logs for feed ID ${options.feedId}`);
+        } else {
+          const result = await dataSource
+            .createQueryBuilder()
+            .delete()
+            .from('rss_import_logs')
+            .execute();
+          deletedCount = result.affected || 0;
+          console.log(`✅ Cleared ${deletedCount} RSS import logs`);
+        }
+
+        await app.close();
+        process.exit(0);
+      } catch (error) {
+        console.error('Error clearing RSS logs:', error);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('db:list')
+    .description('List recent blog posts from database')
+    .option('--limit <number>', 'Number of posts to show', '10')
+    .option('--source <source>', 'Filter by source (rss, mt, etc.)')
+    .action(async (options) => {
+      try {
+        const app = await NestFactory.createApplicationContext(AppModule, {
+          logger: ['log', 'error', 'warn'],
+        });
+
+        await app.init();
+        const blogService = app.get(BlogService);
+
+        const limit = parseInt(options.limit, 10);
+        const posts = await blogService.findAll();
+        
+        // Filter by source if specified
+        let filteredPosts = posts;
+        if (options.source) {
+          filteredPosts = posts.filter(post => {
+            if (options.source === 'rss') {
+              return post.category === 'RSS Import' || post.author === 'sasazame-hateblo';
+            }
+            return true;
+          });
+        }
+
+        // Show limited results
+        const displayPosts = filteredPosts.slice(0, limit);
+
+        console.log(`📝 Blog Posts in Database (showing ${displayPosts.length} of ${filteredPosts.length} total)`);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        
+        displayPosts.forEach((post, index) => {
+          const publishedDate = new Date(post.publishedAt).toLocaleDateString('ja-JP');
+          const createdDate = new Date(post.createdAt).toLocaleDateString('ja-JP');
+          
+          console.log(`${index + 1}. ${post.title}`);
+          console.log(`   📅 Published: ${publishedDate} | Created: ${createdDate}`);
+          console.log(`   👤 Author: ${post.author} | 📂 Category: ${post.category || 'None'}`);
+          console.log(`   🔗 Basename: ${post.basename}`);
+          console.log(`   📊 Status: ${post.status}`);
+          if (post.summary) {
+            console.log(`   📖 Summary: ${post.summary.substring(0, 100)}...`);
+          }
+          console.log('');
+        });
+
+        if (filteredPosts.length > limit) {
+          console.log(`... and ${filteredPosts.length - limit} more posts`);
+        }
+
+        await app.close();
+        process.exit(0);
+      } catch (error) {
+        console.error('Error listing posts:', error);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('db:import-logs')
+    .description('Show RSS import logs')
+    .option('--limit <number>', 'Number of logs to show', '10')
+    .action(async (options) => {
+      try {
+        const app = await NestFactory.createApplicationContext(AppModule, {
+          logger: ['log', 'error', 'warn'],
+        });
+
+        await app.init();
+        const dataSource = app.get(DataSource);
+
+        const limit = parseInt(options.limit, 10);
+        
+        const logs = await dataSource
+          .getRepository('RssImportLog')
+          .createQueryBuilder('log')
+          .leftJoinAndSelect('log.feed', 'feed')
+          .leftJoinAndSelect('log.blogPost', 'blogPost')
+          .orderBy('log.importedAt', 'DESC')
+          .limit(limit)
+          .getMany();
+
+        console.log(`📥 RSS Import Logs (showing ${logs.length} recent imports)`);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        
+        logs.forEach((log, index) => {
+          const importedDate = new Date(log.importedAt).toLocaleString('ja-JP');
+          const publishedDate = new Date(log.publishedAt).toLocaleDateString('ja-JP');
+          
+          console.log(`${index + 1}. ${log.title}`);
+          console.log(`   📅 Published: ${publishedDate} | Imported: ${importedDate}`);
+          console.log(`   📡 Feed: ${log.feed?.name || 'Unknown'}`);
+          console.log(`   🔑 GUID: ${log.guid}`);
+          if (log.blogPost) {
+            console.log(`   ✅ Blog Post ID: ${log.blogPost.id} (${log.blogPost.status})`);
+          } else {
+            console.log(`   ❌ No associated blog post`);
+          }
+          console.log('');
+        });
+
+        await app.close();
+        process.exit(0);
+      } catch (error) {
+        console.error('Error listing import logs:', error);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('db:stats')
+    .description('Show database statistics')
+    .action(async (options) => {
+      try {
+        const app = await NestFactory.createApplicationContext(AppModule, {
+          logger: ['log', 'error', 'warn'],
+        });
+
+        await app.init();
+        const dataSource = app.get(DataSource);
+
+        // Get total counts
+        const totalPosts = await dataSource.getRepository('BlogPost').count();
+        const totalFeeds = await dataSource.getRepository('RssFeed').count();
+        const totalImports = await dataSource.getRepository('RssImportLog').count();
+
+        // Get posts by source
+        const rssImports = await dataSource.getRepository('BlogPost')
+          .createQueryBuilder('post')
+          .where('post.author = :author OR post.category = :category', {
+            author: 'sasazame-hateblo',
+            category: 'RSS Import'
+          })
+          .getCount();
+
+        const mtImports = totalPosts - rssImports;
+
+        // Get recent activity
+        const recentImports = await dataSource.getRepository('RssImportLog')
+          .createQueryBuilder('log')
+          .where('log.importedAt >= :date', { 
+            date: new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
+          })
+          .getCount();
+
+        console.log('📊 Database Statistics');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log(`📝 Total Blog Posts: ${totalPosts}`);
+        console.log(`  ├─ 📡 RSS Imports: ${rssImports}`);
+        console.log(`  └─ 📄 MT Imports: ${mtImports}`);
+        console.log('');
+        console.log(`📡 RSS Feeds: ${totalFeeds}`);
+        console.log(`📥 Total Import Logs: ${totalImports}`);
+        console.log(`🕐 Recent Imports (24h): ${recentImports}`);
+
+        await app.close();
+        process.exit(0);
+      } catch (error) {
+        console.error('Error getting statistics:', error);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('db:show <id>')
+    .description('Show detailed information for a specific blog post')
+    .action(async (id: string) => {
+      try {
+        const app = await NestFactory.createApplicationContext(AppModule, {
+          logger: ['log', 'error', 'warn'],
+        });
+
+        await app.init();
+        const blogService = app.get(BlogService);
+
+        const postId = parseInt(id, 10);
+        const post = await blogService.findOne(postId);
+
+        if (!post) {
+          console.error(`❌ Post with ID ${postId} not found`);
+          process.exit(1);
+        }
+
+        console.log(`📝 Blog Post Details (ID: ${post.id})`);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log(`📋 Title: ${post.title}`);
+        console.log(`👤 Author: ${post.author}`);
+        console.log(`📂 Category: ${post.category || 'None'}`);
+        console.log(`🔗 Basename: ${post.basename}`);
+        console.log(`📊 Status: ${post.status}`);
+        console.log(`📅 Published: ${new Date(post.publishedAt).toLocaleString('ja-JP')}`);
+        console.log(`📅 Created: ${new Date(post.createdAt).toLocaleString('ja-JP')}`);
+        console.log(`📅 Updated: ${new Date(post.updatedAt).toLocaleString('ja-JP')}`);
+        
+        if (post.summary) {
+          console.log(`📖 Summary: ${post.summary}`);
+          console.log(`⭐ Rating: ${post.recommendationStars || 'Not rated'}`);
+        }
+        
+        console.log('');
+        console.log('📄 Body Content:');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        const bodyPreview = post.body?.substring(0, 500) || 'No content';
+        console.log(bodyPreview);
+        
+        if (post.body && post.body.length > 500) {
+          console.log(`\n... (truncated, total length: ${post.body.length} characters)`);
+        }
+
+        if (post.extendedBody) {
+          console.log('\n📄 Extended Body:');
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          const extendedPreview = post.extendedBody.substring(0, 300);
+          console.log(extendedPreview);
+          if (post.extendedBody.length > 300) {
+            console.log(`\n... (truncated, total length: ${post.extendedBody.length} characters)`);
+          }
+        }
+
+        await app.close();
+        process.exit(0);
+      } catch (error) {
+        console.error('Error showing post:', error);
         process.exit(1);
       }
     });

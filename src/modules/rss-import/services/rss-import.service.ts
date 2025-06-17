@@ -6,6 +6,7 @@ import { RssImportLog } from '../entities/rss-import-log.entity';
 import { BlogPost } from '../../blog/entities/blog-post.entity';
 import { BlogService } from '../../blog/services/blog.service';
 import { RssParserService, ParsedRssItem } from './rss-parser.service';
+import { ContentFetcherService } from './content-fetcher.service';
 import * as cron from 'node-cron';
 
 @Injectable()
@@ -20,6 +21,7 @@ export class RssImportService {
     private importLogRepository: Repository<RssImportLog>,
     private blogService: BlogService,
     private rssParserService: RssParserService,
+    private contentFetcherService: ContentFetcherService,
     private dataSource: DataSource,
   ) {}
 
@@ -171,15 +173,26 @@ export class RssImportService {
     await queryRunner.startTransaction();
 
     try {
-      // Create blog post
+      // Fetch extended body content if link is available
+      let extendedBody: string | undefined;
+      if (item.link) {
+        try {
+          extendedBody = await this.contentFetcherService.fetchExtendedBody(item.link, item.body);
+        } catch (error) {
+          this.logger.warn(`Failed to fetch extended content for ${item.title}:`, error.message);
+        }
+      }
+
+      // Create blog post with improved data mapping
       const blogPost = await this.blogService.create({
         title: item.title,
         body: item.body,
+        extendedBody: extendedBody,
         status: 'Publish',
         author: item.author || feed.name,
-        category: feed.category || 'RSS Import',
+        category: item.category || feed.category || 'RSS Import',
         publishedAt: item.date,
-        basename: this.generateBasename(item.title, item.date),
+        basename: item.basename || this.generateBasename(item.title, item.date),
       });
 
       // Create import log
