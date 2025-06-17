@@ -39,7 +39,7 @@ export class AddRssFeedTables1734346000000 implements MigrationInterface {
           },
           {
             name: 'lastSyncAt',
-            type: 'datetime',
+            type: 'timestamp',
             isNullable: true,
           },
           {
@@ -54,12 +54,12 @@ export class AddRssFeedTables1734346000000 implements MigrationInterface {
           },
           {
             name: 'createdAt',
-            type: 'datetime',
+            type: 'timestamp',
             default: 'CURRENT_TIMESTAMP',
           },
           {
             name: 'updatedAt',
-            type: 'datetime',
+            type: 'timestamp',
             default: 'CURRENT_TIMESTAMP',
             onUpdate: 'CURRENT_TIMESTAMP',
           },
@@ -94,7 +94,7 @@ export class AddRssFeedTables1734346000000 implements MigrationInterface {
           },
           {
             name: 'publishedAt',
-            type: 'datetime',
+            type: 'timestamp',
           },
           {
             name: 'blogPostId',
@@ -103,7 +103,7 @@ export class AddRssFeedTables1734346000000 implements MigrationInterface {
           },
           {
             name: 'importedAt',
-            type: 'datetime',
+            type: 'timestamp',
             default: 'CURRENT_TIMESTAMP',
           },
         ],

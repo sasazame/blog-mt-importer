@@ -27,7 +27,7 @@ export class RssFeed {
     tags?: string;
   };
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   lastSyncAt: Date;
 
   @Column({ type: 'int', default: 0 })

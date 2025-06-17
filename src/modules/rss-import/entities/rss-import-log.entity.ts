@@ -20,7 +20,7 @@ export class RssImportLog {
   @Column({ type: 'text' })
   title: string;
 
-  @Column({ type: 'datetime' })
+  @Column({ type: 'timestamp' })
   publishedAt: Date;
 
   @ManyToOne(() => BlogPost, { nullable: true })
