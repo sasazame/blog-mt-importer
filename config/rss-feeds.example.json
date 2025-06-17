@@ -1,0 +1,64 @@
+{
+  "feeds": [
+    {
+      "name": "Example Tech Blog",
+      "url": "https://example.com/feed.xml",
+      "category": "Technology",
+      "enabled": true,
+      "mapping": {
+        "title": "title",
+        "body": "content:encoded",
+        "date": "pubDate",
+        "author": "dc:creator",
+        "link": "link",
+        "tags": "categories"
+      }
+    },
+    {
+      "name": "News Feed",
+      "url": "https://news.example.com/rss",
+      "category": "News",
+      "enabled": true,
+      "mapping": {
+        "title": "title",
+        "body": "description",
+        "date": "pubDate",
+        "author": "author",
+        "link": "link"
+      }
+    },
+    {
+      "name": "Personal Blog",
+      "url": "https://personalblog.example.com/feed",
+      "category": "Personal",
+      "enabled": false,
+      "mapping": null
+    }
+  ],
+  "schedule": {
+    "cron": "0 * * * *",
+    "timezone": "Asia/Tokyo"
+  },
+  "import": {
+    "batchSize": 10,
+    "retryAttempts": 3,
+    "retryDelay": 5000,
+    "maxItemsPerFeed": 100,
+    "autoGenerateSummary": true,
+    "summaryDelay": 2000
+  },
+  "notifications": {
+    "enabled": false,
+    "email": {
+      "to": "admin@example.com",
+      "onSuccess": false,
+      "onError": true
+    },
+    "slack": {
+      "webhookUrl": "",
+      "channel": "#blog-imports",
+      "onSuccess": true,
+      "onError": true
+    }
+  }
+}
