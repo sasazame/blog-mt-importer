@@ -6,6 +6,7 @@ import { MTImportModule } from './modules/mt-import/mt-import.module';
 import { ExportModule } from './modules/export/export.module';
 import { RecommendationModule } from './modules/recommendation/recommendation.module';
 import { LLMModule } from './modules/llm/llm.module';
+import { RssImportModule } from './modules/rss-import/rss-import.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { LLMModule } from './modules/llm/llm.module';
     ExportModule,
     RecommendationModule,
     LLMModule,
+    RssImportModule,
   ],
 })
 export class AppModule {}
