@@ -6,6 +6,7 @@ import { MarkdownExportService } from './modules/export/services/markdown-export
 import { RecommendationService } from './modules/recommendation/services/recommendation.service';
 import { CardGeneratorService } from './modules/recommendation/services/card-generator.service';
 import { SummaryService } from './modules/llm/services/summary.service';
+import { RssImportService } from './modules/rss-import/services/rss-import.service';
 import { Command } from 'commander';
 import * as path from 'path';
 
@@ -446,6 +447,211 @@ async function bootstrap() {
         process.exit(0);
       } catch (error) {
         console.error('Error during summary export:', error);
+        process.exit(1);
+      }
+    });
+
+  // RSS Feed Management Commands
+  program
+    .command('rss:add')
+    .description('Add a new RSS feed')
+    .requiredOption('--name <name>', 'Feed name')
+    .requiredOption('--url <url>', 'Feed URL')
+    .option('--category <category>', 'Default category for imported posts')
+    .option('--enabled', 'Enable feed immediately', true)
+    .action(async (options) => {
+      try {
+        const app = await NestFactory.createApplicationContext(AppModule, {
+          logger: ['log', 'error', 'warn'],
+        });
+
+        await app.init();
+        const rssImportService = app.get(RssImportService);
+
+        const feed = await rssImportService.createFeed({
+          name: options.name,
+          url: options.url,
+          category: options.category,
+          enabled: options.enabled,
+        });
+
+        console.log('✅ RSS feed added successfully!');
+        console.log(`Feed ID: ${feed.id}`);
+        console.log(`Name: ${feed.name}`);
+        console.log(`URL: ${feed.url}`);
+        console.log(`Status: ${feed.enabled ? 'Enabled' : 'Disabled'}`);
+
+        await app.close();
+        process.exit(0);
+      } catch (error) {
+        console.error('Error adding RSS feed:', error);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('rss:list')
+    .description('List all RSS feeds')
+    .action(async () => {
+      try {
+        const app = await NestFactory.createApplicationContext(AppModule, {
+          logger: ['log', 'error', 'warn'],
+        });
+
+        await app.init();
+        const rssImportService = app.get(RssImportService);
+
+        const feeds = await rssImportService.getAllFeeds();
+
+        if (feeds.length === 0) {
+          console.log('No RSS feeds configured.');
+        } else {
+          console.log('Configured RSS Feeds:');
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log('ID | Name                     | URL                                              | Status   | Last Sync           | Imported');
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          
+          for (const feed of feeds) {
+            const id = feed.id.toString().padEnd(2);
+            const name = feed.name.substring(0, 24).padEnd(24);
+            const url = feed.url.substring(0, 48).padEnd(48);
+            const status = (feed.enabled ? 'Enabled' : 'Disabled').padEnd(8);
+            const lastSync = feed.lastSyncAt ? new Date(feed.lastSyncAt).toLocaleString() : 'Never';
+            const imported = feed.importedCount.toString();
+            
+            console.log(`${id} | ${name} | ${url} | ${status} | ${lastSync.padEnd(19)} | ${imported}`);
+          }
+        }
+
+        await app.close();
+        process.exit(0);
+      } catch (error) {
+        console.error('Error listing RSS feeds:', error);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('rss:update <id>')
+    .description('Update an RSS feed')
+    .option('--name <name>', 'Feed name')
+    .option('--url <url>', 'Feed URL')
+    .option('--category <category>', 'Default category')
+    .option('--enable', 'Enable feed')
+    .option('--disable', 'Disable feed')
+    .action(async (id: string, options) => {
+      try {
+        const app = await NestFactory.createApplicationContext(AppModule, {
+          logger: ['log', 'error', 'warn'],
+        });
+
+        await app.init();
+        const rssImportService = app.get(RssImportService);
+
+        const updateData: any = {};
+        if (options.name) updateData.name = options.name;
+        if (options.url) updateData.url = options.url;
+        if (options.category) updateData.category = options.category;
+        if (options.enable) updateData.enabled = true;
+        if (options.disable) updateData.enabled = false;
+
+        const feed = await rssImportService.updateFeed(parseInt(id, 10), updateData);
+
+        console.log('✅ RSS feed updated successfully!');
+        console.log(`Feed ID: ${feed.id}`);
+        console.log(`Name: ${feed.name}`);
+        console.log(`URL: ${feed.url}`);
+        console.log(`Status: ${feed.enabled ? 'Enabled' : 'Disabled'}`);
+
+        await app.close();
+        process.exit(0);
+      } catch (error) {
+        console.error('Error updating RSS feed:', error);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('rss:delete <id>')
+    .description('Delete an RSS feed')
+    .action(async (id: string) => {
+      try {
+        const app = await NestFactory.createApplicationContext(AppModule, {
+          logger: ['log', 'error', 'warn'],
+        });
+
+        await app.init();
+        const rssImportService = app.get(RssImportService);
+
+        await rssImportService.deleteFeed(parseInt(id, 10));
+
+        console.log('✅ RSS feed deleted successfully!');
+
+        await app.close();
+        process.exit(0);
+      } catch (error) {
+        console.error('Error deleting RSS feed:', error);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('rss:import [feedId]')
+    .description('Import posts from RSS feed(s)')
+    .option('--all', 'Import from all enabled feeds')
+    .action(async (feedId: string | undefined, options) => {
+      try {
+        const app = await NestFactory.createApplicationContext(AppModule, {
+          logger: ['log', 'error', 'warn', 'debug'],
+        });
+
+        await app.init();
+        const rssImportService = app.get(RssImportService);
+
+        if (options.all) {
+          console.log('Importing from all enabled RSS feeds...');
+          const results = await rssImportService.importAllFeeds();
+          
+          console.log('\nImport Results:');
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          
+          let totalImported = 0;
+          let totalSkipped = 0;
+          let totalErrors = 0;
+          
+          for (const result of results) {
+            console.log(`\n${result.name} (ID: ${result.feedId}):`);
+            if (result.result.error) {
+              console.log(`  ❌ Error: ${result.result.error}`);
+            } else {
+              console.log(`  ✅ Imported: ${result.result.imported}`);
+              console.log(`  ⏭️  Skipped: ${result.result.skipped}`);
+              console.log(`  ❌ Errors: ${result.result.errors}`);
+              totalImported += result.result.imported;
+              totalSkipped += result.result.skipped;
+              totalErrors += result.result.errors;
+            }
+          }
+          
+          console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log(`Total: Imported=${totalImported}, Skipped=${totalSkipped}, Errors=${totalErrors}`);
+        } else if (feedId) {
+          console.log(`Importing from feed ID ${feedId}...`);
+          const result = await rssImportService.importFeed(parseInt(feedId, 10));
+          
+          console.log('\nImport Results:');
+          console.log(`✅ Imported: ${result.imported}`);
+          console.log(`⏭️  Skipped: ${result.skipped}`);
+          console.log(`❌ Errors: ${result.errors}`);
+        } else {
+          console.error('Please specify a feed ID or use --all to import from all feeds');
+          process.exit(1);
+        }
+
+        await app.close();
+        process.exit(0);
+      } catch (error) {
+        console.error('Error during RSS import:', error);
         process.exit(1);
       }
     });
