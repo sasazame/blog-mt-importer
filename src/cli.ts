@@ -3,6 +3,8 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { MTImportService } from './modules/mt-import/services/mt-import.service';
 import { MarkdownExportService } from './modules/export/services/markdown-export.service';
+import { RecommendationService } from './modules/recommendation/services/recommendation.service';
+import { CardGeneratorService } from './modules/recommendation/services/card-generator.service';
 import { Command } from 'commander';
 import * as path from 'path';
 
@@ -104,6 +106,176 @@ async function bootstrap() {
         process.exit(0);
       } catch (error) {
         console.error('Error during export:', error);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('generate-cards')
+    .description('Generate article cards')
+    .option('--count <count>', 'Number of random cards to generate', '5')
+    .option('--theme <theme>', 'Card theme: light, dark, minimal', 'light')
+    .option('--size <size>', 'Card size: small, medium, large', 'medium')
+    .option('--output <path>', 'Output directory path', './cards')
+    .option('--format <format>', 'Output format: html, iframe', 'html')
+    .option('--no-image', 'Hide images')
+    .option('--no-category', 'Hide categories')
+    .option('--no-date', 'Hide dates')
+    .option('--no-excerpt', 'Hide excerpts')
+    .action(async (options) => {
+      try {
+        const app = await NestFactory.createApplicationContext(AppModule, {
+          logger: ['log', 'error', 'warn'],
+        });
+
+        await app.init();
+        const recommendationService = app.get(RecommendationService);
+        const cardGeneratorService = app.get(CardGeneratorService);
+
+        const count = parseInt(options.count, 10);
+        const outputPath = path.resolve(options.output);
+
+        console.log(`Generating ${count} article cards...`);
+
+        const articles = await recommendationService.getRandomArticles(count);
+        
+        const cardStyle = {
+          theme: options.theme as 'light' | 'dark' | 'minimal',
+          size: options.size as 'small' | 'medium' | 'large',
+          showImage: options.image !== false,
+          showCategory: options.category !== false,
+          showDate: options.date !== false,
+          showExcerpt: options.excerpt !== false,
+        };
+
+        const fs = await import('fs/promises');
+        await fs.mkdir(outputPath, { recursive: true });
+
+        for (let i = 0; i < articles.length; i++) {
+          const article = articles[i];
+          let cardHtml: string;
+          let filename: string;
+
+          if (options.format === 'iframe') {
+            cardHtml = await cardGeneratorService.generateArticleCardForIframe(article, cardStyle);
+            filename = `card-${article.id}-iframe.html`;
+          } else {
+            cardHtml = await cardGeneratorService.generateArticleCard(article, cardStyle);
+            filename = `card-${article.id}.html`;
+          }
+
+          const filepath = path.join(outputPath, filename);
+          await fs.writeFile(filepath, cardHtml, 'utf-8');
+          console.log(`Generated: ${filename}`);
+        }
+
+        await app.close();
+        console.log(`Card generation completed! ${articles.length} cards saved to ${outputPath}`);
+        process.exit(0);
+      } catch (error) {
+        console.error('Error during card generation:', error);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('generate-widget')
+    .description('Generate random article widgets')
+    .option('--type <type>', 'Widget type: random, category', 'random')
+    .option('--category <category>', 'Category for category-based widgets')
+    .option('--count <count>', 'Number of articles in widget', '5')
+    .option('--theme <theme>', 'Widget theme: light, dark, minimal', 'light')
+    .option('--output <path>', 'Output directory path', './widgets')
+    .action(async (options) => {
+      try {
+        const app = await NestFactory.createApplicationContext(AppModule, {
+          logger: ['log', 'error', 'warn'],
+        });
+
+        await app.init();
+        const recommendationService = app.get(RecommendationService);
+        const cardGeneratorService = app.get(CardGeneratorService);
+
+        const count = parseInt(options.count, 10);
+        const outputPath = path.resolve(options.output);
+
+        console.log(`Generating ${options.type} widget with ${count} articles...`);
+
+        let articles;
+        if (options.type === 'category' && options.category) {
+          articles = await recommendationService.getRandomArticlesByCategory(options.category, count);
+        } else {
+          articles = await recommendationService.getRandomArticles(count);
+        }
+
+        const cardStyle = {
+          theme: options.theme as 'light' | 'dark' | 'minimal',
+          size: 'medium' as const,
+          showImage: true,
+          showCategory: true,
+          showDate: true,
+          showExcerpt: true,
+        };
+
+        const fs = await import('fs/promises');
+        await fs.mkdir(outputPath, { recursive: true });
+
+        // Generate individual cards for the widget
+        const cardPromises = articles.map(article => 
+          cardGeneratorService.generateArticleCard(article, cardStyle)
+        );
+        const cardHtmls = await Promise.all(cardPromises);
+
+        // Create widget HTML
+        const widgetHtml = `
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ブログ記事ウィジェット</title>
+  <style>
+    .blog-widget {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .blog-widget__title {
+      font-size: 24px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .blog-widget__grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="blog-widget">
+    <h2 class="blog-widget__title">
+      ${options.type === 'category' && options.category ? `${options.category} の記事` : 'おすすめ記事'}
+    </h2>
+    <div class="blog-widget__grid">
+      ${cardHtmls.join('\n      ')}
+    </div>
+  </div>
+</body>
+</html>`;
+
+        const filename = options.type === 'category' && options.category 
+          ? `widget-${options.category}-${count}.html`
+          : `widget-random-${count}.html`;
+        
+        const filepath = path.join(outputPath, filename);
+        await fs.writeFile(filepath, widgetHtml, 'utf-8');
+
+        await app.close();
+        console.log(`Widget generated successfully: ${filename}`);
+        process.exit(0);
+      } catch (error) {
+        console.error('Error during widget generation:', error);
         process.exit(1);
       }
     });

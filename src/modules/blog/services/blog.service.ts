@@ -86,4 +86,65 @@ export class BlogService {
       order: { publishedAt: 'DESC' },
     });
   }
+
+  async findRandom(count: number = 1): Promise<BlogPost[]> {
+    const query = this.blogPostRepository
+      .createQueryBuilder('post')
+      .where('post.status = :status', { status: 'Publish' })
+      .orderBy('RANDOM()')
+      .limit(count);
+
+    return query.getMany();
+  }
+
+  async findRandomByCategory(category: string, count: number = 1): Promise<BlogPost[]> {
+    const query = this.blogPostRepository
+      .createQueryBuilder('post')
+      .where('post.status = :status', { status: 'Publish' })
+      .andWhere('post.category = :category', { category })
+      .orderBy('RANDOM()')
+      .limit(count);
+
+    return query.getMany();
+  }
+
+  async findRelated(postId: number, count: number = 5): Promise<BlogPost[]> {
+    const post = await this.findOne(postId);
+    if (!post) {
+      return [];
+    }
+
+    // Find posts in the same category, excluding the current post
+    const query = this.blogPostRepository
+      .createQueryBuilder('post')
+      .where('post.status = :status', { status: 'Publish' })
+      .andWhere('post.id != :postId', { postId })
+      .orderBy('RANDOM()')
+      .limit(count);
+
+    if (post.category) {
+      query.andWhere('post.category = :category', { category: post.category });
+    }
+
+    return query.getMany();
+  }
+
+  async getCategories(): Promise<string[]> {
+    const result = await this.blogPostRepository
+      .createQueryBuilder('post')
+      .select('DISTINCT post.category', 'category')
+      .where('post.category IS NOT NULL')
+      .andWhere('post.category != :empty', { empty: '' })
+      .andWhere('post.status = :status', { status: 'Publish' })
+      .orderBy('post.category', 'ASC')
+      .getRawMany();
+
+    return result.map(row => row.category);
+  }
+
+  async getPostCount(): Promise<number> {
+    return this.blogPostRepository.count({
+      where: { status: 'Publish' },
+    });
+  }
 }

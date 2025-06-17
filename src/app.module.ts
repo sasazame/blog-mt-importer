@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { BlogModule } from './modules/blog/blog.module';
 import { MTImportModule } from './modules/mt-import/mt-import.module';
 import { ExportModule } from './modules/export/export.module';
+import { RecommendationModule } from './modules/recommendation/recommendation.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { ExportModule } from './modules/export/export.module';
     BlogModule,
     MTImportModule,
     ExportModule,
+    RecommendationModule,
   ],
 })
 export class AppModule {}
