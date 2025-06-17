@@ -5,6 +5,7 @@ import { BlogModule } from './modules/blog/blog.module';
 import { MTImportModule } from './modules/mt-import/mt-import.module';
 import { ExportModule } from './modules/export/export.module';
 import { RecommendationModule } from './modules/recommendation/recommendation.module';
+import { LLMModule } from './modules/llm/llm.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { RecommendationModule } from './modules/recommendation/recommendation.mo
     MTImportModule,
     ExportModule,
     RecommendationModule,
+    LLMModule,
   ],
 })
 export class AppModule {}

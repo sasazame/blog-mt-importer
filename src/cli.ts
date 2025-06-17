@@ -5,6 +5,7 @@ import { MTImportService } from './modules/mt-import/services/mt-import.service'
 import { MarkdownExportService } from './modules/export/services/markdown-export.service';
 import { RecommendationService } from './modules/recommendation/services/recommendation.service';
 import { CardGeneratorService } from './modules/recommendation/services/card-generator.service';
+import { SummaryService } from './modules/llm/services/summary.service';
 import { Command } from 'commander';
 import * as path from 'path';
 
@@ -276,6 +277,175 @@ async function bootstrap() {
         process.exit(0);
       } catch (error) {
         console.error('Error during widget generation:', error);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('test-gemini')
+    .description('Test Gemini API connection')
+    .action(async () => {
+      try {
+        const app = await NestFactory.createApplicationContext(AppModule, {
+          logger: ['log', 'error', 'warn', 'debug'],
+        });
+
+        await app.init();
+        const summaryService = app.get(SummaryService);
+
+        console.log('Testing Gemini API connection...');
+        
+        // Test with a simple article
+        const testResult = await summaryService['geminiService'].generateSummaryAndRating(
+          'テスト記事',
+          'これはテスト用の記事です。簡単な内容でAPIの動作を確認します。',
+          'テスト',
+          '2024-01-01',
+        );
+
+        console.log('✅ Gemini API test successful!');
+        console.log('Test summary:', testResult.summary);
+        console.log('Test rating:', testResult.recommendation_stars);
+
+        await app.close();
+        process.exit(0);
+      } catch (error) {
+        console.error('❌ Gemini API test failed:', error);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('generate-summaries')
+    .description('Generate AI summaries and ratings for blog posts')
+    .option('--start-id <id>', 'Start article ID (inclusive)', '1')
+    .option('--end-id <id>', 'End article ID (inclusive)')
+    .option('--all', 'Process all articles')
+    .option('--only-unprocessed', 'Only process articles without summaries')
+    .option('--delay <ms>', 'Delay between API calls in milliseconds', '1000')
+    .action(async (options) => {
+      try {
+        const app = await NestFactory.createApplicationContext(AppModule, {
+          logger: ['log', 'error', 'warn'],
+        });
+
+        await app.init();
+        const summaryService = app.get(SummaryService);
+
+        const delay = parseInt(options.delay, 10);
+        const onlyUnprocessed = options.onlyUnprocessed || false;
+
+        if (options.all) {
+          console.log(`Generating summaries for all articles (onlyUnprocessed: ${onlyUnprocessed})...`);
+          await summaryService.generateSummariesForAll(10, delay, onlyUnprocessed);
+        } else if (options.endId) {
+          const startId = parseInt(options.startId, 10);
+          const endId = parseInt(options.endId, 10);
+          console.log(`Generating summaries for articles ${startId}-${endId} (onlyUnprocessed: ${onlyUnprocessed})...`);
+          await summaryService.generateSummariesForRange(startId, endId, delay, onlyUnprocessed);
+        } else {
+          console.error('Please specify --all or --end-id with optional --start-id');
+          process.exit(1);
+        }
+
+        await app.close();
+        console.log('Summary generation completed successfully!');
+        process.exit(0);
+      } catch (error) {
+        console.error('Error during summary generation:', error);
+        
+        // Check if it's a rate limit error and provide helpful message
+        if (error.message?.includes('Rate limit exceeded')) {
+          console.error('\n❌ Rate limit exceeded!');
+          console.error('📋 To continue processing:');
+          console.error('  1. Wait for the quota to reset (typically 1 minute for free tier)');
+          console.error('  2. Use --only-unprocessed flag to resume from where you left off');
+          console.error('  3. Consider increasing --delay to avoid hitting limits');
+          console.error('\n💡 Example resume command:');
+          if (options.all) {
+            console.error('  npm run cli -- generate-summaries --all --only-unprocessed --delay 5000');
+          } else {
+            console.error(`  npm run cli -- generate-summaries --start-id ${options.startId} --end-id ${options.endId} --only-unprocessed --delay 5000`);
+          }
+        }
+        
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('summary-progress')
+    .description('Check summary generation progress')
+    .action(async () => {
+      try {
+        const app = await NestFactory.createApplicationContext(AppModule, {
+          logger: ['log', 'error', 'warn'],
+        });
+
+        await app.init();
+        const summaryService = app.get(SummaryService);
+
+        // Get total count
+        const totalCount = await summaryService['blogPostRepository'].count();
+        
+        // Get processed count
+        const processedCount = await summaryService['blogPostRepository']
+          .createQueryBuilder('post')
+          .where('post.summary IS NOT NULL AND post.summary != \'\' AND post.recommendationStars IS NOT NULL')
+          .getCount();
+          
+        // Get unprocessed count
+        const unprocessedCount = totalCount - processedCount;
+        const progressPercent = Math.round((processedCount / totalCount) * 100);
+
+        console.log('📊 Summary Generation Progress');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log(`Total articles:      ${totalCount}`);
+        console.log(`Processed:           ${processedCount} (${progressPercent}%)`);
+        console.log(`Remaining:           ${unprocessedCount}`);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        
+        if (unprocessedCount > 0) {
+          console.log('\n💡 To process remaining articles:');
+          console.log('  npm run cli -- generate-summaries --all --only-unprocessed --delay 5000');
+        } else {
+          console.log('\n✅ All articles have been processed!');
+        }
+
+        await app.close();
+        process.exit(0);
+      } catch (error) {
+        console.error('Error checking progress:', error);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('export-summaries')
+    .description('Export article summaries to CSV')
+    .option('--output <path>', 'Output CSV file path', './exports/blog-articles-summaries.csv')
+    .option('--only-processed', 'Export only articles with summaries')
+    .action(async (options) => {
+      try {
+        const app = await NestFactory.createApplicationContext(AppModule, {
+          logger: ['log', 'error', 'warn'],
+        });
+
+        await app.init();
+        const summaryService = app.get(SummaryService);
+
+        const outputPath = path.resolve(options.output);
+        const onlyProcessed = options.onlyProcessed || false;
+        
+        console.log(`Exporting summaries to: ${outputPath} (onlyProcessed: ${onlyProcessed})`);
+
+        await summaryService.exportSummariesToCSV(outputPath, onlyProcessed);
+
+        await app.close();
+        console.log('Summary export completed successfully!');
+        process.exit(0);
+      } catch (error) {
+        console.error('Error during summary export:', error);
         process.exit(1);
       }
     });

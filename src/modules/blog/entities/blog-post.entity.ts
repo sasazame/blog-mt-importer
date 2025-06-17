@@ -48,6 +48,12 @@ export class BlogPost {
   @Column({ type: 'text', nullable: true })
   extendedBody: string;
 
+  @Column({ type: 'text', nullable: true })
+  summary: string;
+
+  @Column({ type: 'int', nullable: true, default: null })
+  recommendationStars: number;
+
   @CreateDateColumn()
   createdAt: Date;
 
