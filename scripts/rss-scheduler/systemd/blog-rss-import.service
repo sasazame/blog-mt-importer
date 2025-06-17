@@ -1,0 +1,25 @@
+[Unit]
+Description=Blog RSS Import Service
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=node
+Group=node
+WorkingDirectory=/opt/blog-mt-importer
+Environment="NODE_ENV=production"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+ExecStart=/usr/bin/npm run cli -- rss:import --all
+StandardOutput=append:/var/log/blog-mt-importer/rss-import.log
+StandardError=append:/var/log/blog-mt-importer/rss-import-error.log
+
+# Restart policy
+Restart=on-failure
+RestartSec=10
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

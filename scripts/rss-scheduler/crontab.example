@@ -1,0 +1,22 @@
+# RSS Import Crontab Configuration Example
+# 
+# Add these lines to your crontab by running: crontab -e
+# Adjust the schedule and paths according to your needs
+
+# Import RSS feeds every hour
+0 * * * * /path/to/blog-mt-importer/scripts/rss-scheduler/rss-import-cron.sh
+
+# Import RSS feeds every 30 minutes
+*/30 * * * * /path/to/blog-mt-importer/scripts/rss-scheduler/rss-import-cron.sh
+
+# Import RSS feeds every 6 hours
+0 */6 * * * /path/to/blog-mt-importer/scripts/rss-scheduler/rss-import-cron.sh
+
+# Import RSS feeds twice daily (at 8 AM and 8 PM)
+0 8,20 * * * /path/to/blog-mt-importer/scripts/rss-scheduler/rss-import-cron.sh
+
+# Import RSS feeds once daily at 2 AM
+0 2 * * * /path/to/blog-mt-importer/scripts/rss-scheduler/rss-import-cron.sh
+
+# Import RSS feeds every Monday at 3 AM
+0 3 * * 1 /path/to/blog-mt-importer/scripts/rss-scheduler/rss-import-cron.sh

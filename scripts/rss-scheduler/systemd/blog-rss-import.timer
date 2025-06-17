@@ -1,0 +1,19 @@
+[Unit]
+Description=Blog RSS Import Timer
+Requires=blog-rss-import.service
+
+[Timer]
+# Run every hour
+OnCalendar=hourly
+
+# Run 5 minutes after boot
+OnBootSec=5min
+
+# If the system was down when the timer should have fired, run it when the system starts
+Persistent=true
+
+# Randomize start time by up to 5 minutes to avoid load spikes
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
