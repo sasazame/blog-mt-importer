@@ -6,7 +6,7 @@ import * as cheerio from 'cheerio';
 export class ContentFetcherService {
   private readonly logger = new Logger(ContentFetcherService.name);
 
-  async fetchExtendedBody(url: string, existingBody: string): Promise<string | undefined> {
+  async fetchFullContent(url: string): Promise<{ body: string; extendedBody?: string } | null> {
     try {
       this.logger.debug(`Fetching extended content from: ${url}`);
       
@@ -24,7 +24,7 @@ export class ContentFetcherService {
       
       if (entryContent.length === 0) {
         this.logger.warn(`No .entry-content.hatenablog-entry found for ${url}`);
-        return undefined;
+        return null;
       }
 
       // Get the full HTML content
@@ -32,24 +32,16 @@ export class ContentFetcherService {
       
       if (!fullContent) {
         this.logger.warn(`Empty content extracted from ${url}`);
-        return undefined;
+        return null;
       }
 
       // Clean up the HTML content
       fullContent = this.cleanHtmlContent(fullContent);
 
-      // Extract extended body by removing the RSS body content
-      const extendedBody = this.extractExtendedBody(fullContent, existingBody);
-
-      if (extendedBody && extendedBody.trim().length > 0) {
-        this.logger.debug(`Extracted extended body (${extendedBody.length} chars) from ${url}`);
-        return extendedBody;
-      }
-
-      return undefined;
+      return { body: fullContent, extendedBody: undefined };
     } catch (error) {
       this.logger.error(`Failed to fetch content from ${url}:`, error.message);
-      return undefined;
+      return null;
     }
   }
 
@@ -69,119 +61,135 @@ export class ContentFetcherService {
     return $.html();
   }
 
-  private extractExtendedBody(fullContent: string, rssBody: string): string {
-    // Remove HTML tags from RSS body for comparison
-    const rssBodyText = this.stripHtml(rssBody).trim();
-    const fullContentText = this.stripHtml(fullContent).trim();
-
-    // If RSS body is empty or very short, return full content
-    if (rssBodyText.length < 50) {
-      return fullContent;
-    }
-
-    // Find where RSS content ends in the full content
-    const rssEndIndex = fullContentText.indexOf(rssBodyText);
+  splitContentByRssBody(fullHtmlContent: string, rssBodyText: string): { body: string; extendedBody?: string } {
+    const $ = cheerio.load(fullHtmlContent);
+    const fullText = this.stripHtml(fullHtmlContent);
     
-    if (rssEndIndex === -1) {
-      // RSS content not found in full content, check if full content contains RSS
-      if (fullContentText.includes(rssBodyText.substring(0, Math.min(100, rssBodyText.length)))) {
-        // RSS content seems to be embedded, try to extract remaining content
-        return this.extractRemainingContent(fullContent, rssBody);
-      }
+    this.logger.debug(`RSS text length: ${rssBodyText.length}`);
+    this.logger.debug(`Full HTML length: ${fullHtmlContent.length}, text length: ${fullText.length}`);
+    
+    // If RSS is very short or full content is not much longer, just return full content
+    if (rssBodyText.length < 50 || fullText.length < rssBodyText.length * 2) {
+      return { body: fullHtmlContent };
+    }
+    
+    // Since RSS is typically a preview, use its length as a guide
+    // Find approximately where in the HTML we should split based on text length
+    const targetSplitLength = rssBodyText.length;
+    
+    // Try to find a good split point - look for paragraph breaks
+    const paragraphs = $('p').toArray();
+    let accumulatedLength = 0;
+    let splitAfterIndex = -1;
+    
+    for (let i = 0; i < paragraphs.length; i++) {
+      const pText = $(paragraphs[i]).text();
+      accumulatedLength += pText.length;
       
-      // No overlap found, return full content as extended
-      this.logger.debug('No overlap between RSS and full content, returning full content');
-      return fullContent;
-    }
-
-    // Calculate the end position of RSS content in full text
-    const rssContentEndInFull = rssEndIndex + rssBodyText.length;
-    
-    // Get remaining content after RSS part
-    const remainingText = fullContentText.substring(rssContentEndInFull).trim();
-    
-    if (remainingText.length < 50) {
-      // Very little additional content
-      return fullContent;
-    }
-
-    // Find the corresponding position in HTML and extract remaining HTML
-    return this.extractHtmlFromPosition(fullContent, fullContentText, rssContentEndInFull);
-  }
-
-  private extractRemainingContent(fullContent: string, rssBody: string): string {
-    // Create cheerio instances for both contents
-    const $full = cheerio.load(fullContent);
-    const $rss = cheerio.load(rssBody);
-
-    // Extract text content for comparison
-    const fullText = $full.text().trim();
-    const rssText = $rss.text().trim();
-
-    // Find common ending point
-    const commonLength = this.findCommonSuffix(fullText, rssText);
-    
-    if (commonLength > 50) {
-      // Found significant overlap, extract the part after RSS content
-      const splitPoint = fullText.length - commonLength;
-      const remainingText = fullText.substring(splitPoint + rssText.length);
-      
-      if (remainingText.trim().length > 50) {
-        // Extract corresponding HTML
-        return this.extractHtmlFromText(fullContent, remainingText);
+      if (accumulatedLength >= targetSplitLength * 0.8) {
+        // We've reached approximately the RSS content length
+        splitAfterIndex = i;
+        break;
       }
     }
-
-    return fullContent;
-  }
-
-  private extractHtmlFromPosition(fullHtml: string, fullText: string, position: number): string {
-    // This is a simplified approach - in practice, you might need more sophisticated
-    // HTML parsing to maintain proper structure
-    const remainingText = fullText.substring(position);
     
-    // Find the HTML that corresponds to the remaining text
-    const $ = cheerio.load(fullHtml);
-    
-    // Extract elements that contain the remaining text
-    const elements = $('*').filter((_, el) => {
-      const elementText = $(el).text();
-      return remainingText.includes(elementText) && elementText.length > 20;
-    });
-
-    if (elements.length > 0) {
-      return elements.map((_, el) => $.html(el)).get().join('\n');
-    }
-
-    // Fallback: return remaining text wrapped in a paragraph
-    return `<p>${remainingText}</p>`;
-  }
-
-  private extractHtmlFromText(fullHtml: string, targetText: string): string {
-    const $ = cheerio.load(fullHtml);
-    
-    // Find elements containing the target text
-    const matchingElements = $('*').filter((_, el) => {
-      return $(el).text().includes(targetText.substring(0, Math.min(100, targetText.length)));
-    });
-
-    if (matchingElements.length > 0) {
-      return matchingElements.map((_, el) => $.html(el)).get().join('\n');
-    }
-
-    return `<p>${targetText}</p>`;
-  }
-
-  private findCommonSuffix(str1: string, str2: string): number {
-    let i = 0;
-    const minLength = Math.min(str1.length, str2.length);
-    
-    while (i < minLength && str1[str1.length - 1 - i] === str2[str2.length - 1 - i]) {
-      i++;
+    if (splitAfterIndex === -1 || splitAfterIndex === paragraphs.length - 1) {
+      // No good split point or would split at the very end
+      return { body: fullHtmlContent };
     }
     
-    return i;
+    // Create body and extended content
+    const $body = cheerio.load('<div></div>');
+    const $extended = cheerio.load('<div></div>');
+    
+    // Add all elements to both documents first
+    const allElements = $('body').children().toArray();
+    if (allElements.length === 0) {
+      // If no body tag, get all top-level elements
+      const elements = $.root().children().toArray();
+      allElements.push(...elements);
+    }
+    
+    let foundSplitPoint = false;
+    
+    for (const element of allElements) {
+      const $el = $(element);
+      
+      // Check if this element contains our split paragraph
+      const containsSplitP = $el.find(paragraphs[splitAfterIndex]).length > 0;
+      
+      if (containsSplitP) {
+        // This element contains the split point
+        // We need to split this element
+        foundSplitPoint = true;
+        
+        // Clone the element for body (up to split point)
+        const $bodyClone = $el.clone();
+        const bodyParagraphs = $bodyClone.find('p');
+        bodyParagraphs.each((idx, p) => {
+          const originalP = $el.find('p').eq(idx);
+          // Check if this paragraph comes after split point
+          let shouldRemove = false;
+          for (let i = splitAfterIndex + 1; i < paragraphs.length; i++) {
+            if (originalP[0] === paragraphs[i]) {
+              shouldRemove = true;
+              break;
+            }
+          }
+          if (shouldRemove) {
+            $(p).remove();
+          }
+        });
+        
+        $body('div').append($bodyClone);
+        
+        // Clone the element for extended (from split point)
+        const $extendedClone = $el.clone();
+        const extendedParagraphs = $extendedClone.find('p');
+        extendedParagraphs.each((idx, p) => {
+          const originalP = $el.find('p').eq(idx);
+          // Check if this paragraph comes before split point
+          let shouldRemove = false;
+          for (let i = 0; i <= splitAfterIndex; i++) {
+            if (originalP[0] === paragraphs[i]) {
+              shouldRemove = true;
+              break;
+            }
+          }
+          if (shouldRemove) {
+            $(p).remove();
+          }
+        });
+        
+        // Only add to extended if there's content left
+        if ($extendedClone.text().trim().length > 0) {
+          $extended('div').append($extendedClone);
+        }
+        
+      } else if (!foundSplitPoint) {
+        // Before split point - add to body only
+        $body('div').append($el.clone());
+      } else {
+        // After split point - add to extended only
+        $extended('div').append($el.clone());
+      }
+    }
+    
+    const bodyHtml = $body('div').html() || fullHtmlContent;
+    const extendedHtml = $extended('div').html() || '';
+    
+    // Only return extended body if it has substantial content
+    if (extendedHtml.length > 50 && this.stripHtml(extendedHtml).length > 50) {
+      this.logger.debug(`Split content: body=${bodyHtml.length} chars, extended=${extendedHtml.length} chars`);
+      return {
+        body: bodyHtml,
+        extendedBody: extendedHtml
+      };
+    }
+    
+    return { body: fullHtmlContent };
   }
+
 
   private stripHtml(html: string): string {
     return cheerio.load(html).text().replace(/\s+/g, ' ').trim();

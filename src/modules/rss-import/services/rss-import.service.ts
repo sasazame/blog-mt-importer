@@ -173,20 +173,36 @@ export class RssImportService {
     await queryRunner.startTransaction();
 
     try {
-      // Fetch extended body content if link is available
+      // Fetch full content and split it properly
+      let body = item.body;
       let extendedBody: string | undefined;
+      
       if (item.link) {
         try {
-          extendedBody = await this.contentFetcherService.fetchExtendedBody(item.link, item.body);
+          const fullContent = await this.contentFetcherService.fetchFullContent(item.link);
+          
+          if (fullContent) {
+            // Try to split the content based on RSS body
+            const splitResult = this.contentFetcherService.splitContentByRssBody(
+              fullContent.body,
+              item.body
+            );
+            
+            body = splitResult.body;
+            extendedBody = splitResult.extendedBody;
+            
+            this.logger.debug(`Content split for ${item.title}: body=${body.length} chars, extended=${extendedBody?.length || 0} chars`);
+          }
         } catch (error) {
-          this.logger.warn(`Failed to fetch extended content for ${item.title}:`, error.message);
+          this.logger.warn(`Failed to fetch content for ${item.title}:`, error.message);
+          // Fall back to RSS content
         }
       }
 
       // Create blog post with improved data mapping
       const blogPost = await this.blogService.create({
         title: item.title,
-        body: item.body,
+        body: body,
         extendedBody: extendedBody,
         status: 'Publish',
         author: item.author || feed.name,
